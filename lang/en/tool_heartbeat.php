@@ -31,3 +31,22 @@ $string['progresshelp'] = 'This tests that all the various output buffers in the
 $string['testwarning'] = 'Fake a warning';
 $string['testerror'] = 'Fake a critical';
 
+//Login Checker
+
+$string['logpluginname'] = 'Login Checker';
+$string['logtesting'] = 'Test login checker';
+$string['logtestingdesc'] = 'You can use this to temporarily fake a warn or error condition to test that your monitoring is correctly working end to end.';
+$string['lognormal'] = 'Normal monitoring';
+$string['logtestwarning'] = 'Fake a warning';
+$string['logtesterror'] = 'Fake a critical';
+
+$string['logwarningthresh'] = 'Warning Alert Threshold';
+$string['logwarningthresh_desc'] = 'How many invalid logins can be detected before triggering a warning alert';
+
+$string['logcriticalthresh'] = 'Critical Alert Threshold';
+$string['logcriticalthresh_desc'] = 'How many invalid logins can be detected before triggering a critical alert';
+
+$string['logtimecheck'] = 'Course lifetime';
+$string['logtimecheck_desc'] = 'How long should the time period be to check invalid logins';
+
+
