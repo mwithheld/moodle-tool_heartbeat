@@ -24,7 +24,7 @@
  */
 defined('MOODLE_INTERNAL') || die;
 
-require_once __DIR__ . '/../classes/loginchecker.php';
+require_once(__DIR__ . '/../classes/loginchecker.php');
 
 class tool_loginchecker_loginchecker_test extends advanced_testcase
 {
