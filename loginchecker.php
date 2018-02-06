@@ -153,9 +153,6 @@ if ($testing == 'error') {
 
 function parse_log_data($tablequery) {
     $count = 0;
-    $topip;
-    $topuser;
-    $topcount = 0;
 
     foreach ($tablequery as $row) {
 

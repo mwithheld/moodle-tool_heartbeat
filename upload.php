@@ -27,6 +27,7 @@
  * php cli/testupload.php
  *
  */
+define('NO_UPGRADE_CHECK', true);
 
 $starttime = microtime(true);
 
