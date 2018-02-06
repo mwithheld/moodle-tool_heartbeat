@@ -145,7 +145,7 @@ if ($testing == 'error') {
     send_warning("Moodle this is a test $CFG->wwwroot/admin/settings.php?section=tool_heartbeat\n");
 }
 
-    $sqlstring = 'SELECT count(*) AS logincount,other, origin, ip FROM mdl_logstore_standard_log WHERE target = "user_login" 
+    $sqlstring = 'SELECT count(*) AS logincount,other, origin, ip FROM mdl_logstore_standard_log WHERE target = "user_login"
     AND timecreated > ' . $checktime . ' GROUP BY other, origin, ip order BY logincount desc';
     $tablequery = $DB->get_records_sql($sqlstring);
 

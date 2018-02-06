@@ -29,6 +29,7 @@
  *  - https://nagios-plugins.org/doc/guidelines.html#PLUGOUTPUT
  *
  */
+defined('MOODLE_INTERNAL') || die;
 
 define('NO_UPGRADE_CHECK', true);
 

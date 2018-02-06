@@ -41,7 +41,7 @@ if ($hassiteconfig) {
             new lang_string('testingdesc', 'tool_heartbeat'),
             'error',
             $options));
-}
+    }
 
     // Login Checker Settings.
 
