@@ -31,7 +31,7 @@ $string['progresshelp'] = 'This tests that all the various output buffers in the
 $string['testwarning'] = 'Fake a warning';
 $string['testerror'] = 'Fake a critical';
 
-//Login Checker
+// Login Checker.
 
 $string['logpluginname'] = 'Login Checker';
 $string['logtesting'] = 'Test login checker';

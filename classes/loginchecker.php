@@ -15,10 +15,10 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * CRON health check
+ * Failed Login Checker
  *
  * @package    tool_loginchecker
- * @copyright  2015 Brendan Heywood <brendan@catalyst-au.net>
+ * @copyright  2018 Paul Damiani <pauldamiani@catalyst-au.net>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  *
  * This can be run either as a web api, or on the CLI. When run on the
@@ -29,26 +29,17 @@
  *  - https://nagios-plugins.org/doc/guidelines.html#PLUGOUTPUT
  *
  */
+defined('MOODLE_INTERNAL') || die;
 
-class loginchecker
-{
 
-    public static function parse_log_data($tablequery)
-    {
+class loginchecker {
+
+    public static function parse_log_data($tablequery) {
         $count = 0;
-        $topip;
-        $topuser;
-        $topcount = 0;
 
         foreach ($tablequery as $row) {
 
             $currentcount = $row->logincount;
-
-            if ($currentcount > $topcount) {
-                $topcount = $currentcount;
-                $topip = $row->ip;
-            }
-
             $count += $currentcount;
 
         }
@@ -56,26 +47,22 @@ class loginchecker
         return $count;
     }
 
-    public function send_good($msg)
-    {
+    public function send_good($msg) {
         global $now;
         printf("OK: $msg\n(Checked $now)\n");
     }
 
-    public function send_warning($msg)
-    {
+    public function send_warning($msg) {
         global $now;
         printf("WARNING: $msg\n(Checked $now)\n");
     }
 
-    public function send_critical($msg)
-    {
+    public function send_critical($msg) {
         global $now;
         printf("CRITICAL: $msg\n(Checked $now)\n");
     }
 
-    public static function test_log_data($count, $criticalthreshold, $warningthreshhold, $logindelay)
-    {
+    public static function test_log_data($count, $criticalthreshold, $warningthreshhold, $logindelay) {
 
         if ($count > $criticalthreshold) {
             $timeinmins = $logindelay / 60;

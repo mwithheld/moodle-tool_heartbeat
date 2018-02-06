@@ -29,21 +29,21 @@ if ($hassiteconfig) {
     $settings = new admin_settingpage('tool_heartbeat', get_string('pluginname', 'tool_heartbeat'));
 
     $ADMIN->add('tools', $settings);
-if (!during_initial_install()) {
+    if (!during_initial_install()) {
 
-    $options = array(
-        '' => new lang_string('normal', 'tool_heartbeat'),
-        'warn' => new lang_string('testwarning', 'tool_heartbeat'),
-        'error' => new lang_string('testerror', 'tool_heartbeat'),
-    );
-    $settings->add(new admin_setting_configselect('tool_heartbeat/testing',
-        new lang_string('testing', 'tool_heartbeat'),
-        new lang_string('testingdesc', 'tool_heartbeat'),
-        'error',
-        $options));
-    }
+        $options = array(
+            '' => new lang_string('normal', 'tool_heartbeat'),
+            'warn' => new lang_string('testwarning', 'tool_heartbeat'),
+            'error' => new lang_string('testerror', 'tool_heartbeat'),
+        );
+        $settings->add(new admin_setting_configselect('tool_heartbeat/testing',
+            new lang_string('testing', 'tool_heartbeat'),
+            new lang_string('testingdesc', 'tool_heartbeat'),
+            'error',
+            $options));
+}
 
-    //Login Checker Settings
+    // Login Checker Settings.
 
     $options = array(
         '' => new lang_string('lognormal', 'tool_heartbeat'),

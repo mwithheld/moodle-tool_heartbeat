@@ -1,12 +1,12 @@
 <?php
+defined('MOODLE_INTERNAL') || die;
 
 require_once __DIR__ . '/../classes/loginchecker.php';
 
 class tool_loginchecker_loginchecker_test extends advanced_testcase
 {
 
-    public function test_log_counting()
-    {
+    public function test_log_counting() {
         $data1 = new stdClass();
         $data1->logincount = 15;
         $data1->origin = 'web';
@@ -69,8 +69,7 @@ class tool_loginchecker_loginchecker_test extends advanced_testcase
         $this->assertEquals(276, $finalcount);
     }
 
-    public function test_error_output()
-    {
+    public function test_error_output() {
 
     }
 }

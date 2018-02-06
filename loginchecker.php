@@ -15,10 +15,10 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * CRON health check
+ * Failed Login Checker
  *
  * @package    tool_heartbeat
- * @copyright  2015 Brendan Heywood <brendan@catalyst-au.net>
+ * @copyright  2018 Paul Damiani <pauldamiani@catalyst-au.net>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  *
  * This can be run either as a web api, or on the CLI. When run on the
@@ -31,7 +31,7 @@
  */
 
 define('NO_UPGRADE_CHECK', true);
-require_once __DIR__ . '/../../../config.php';
+require_once(__DIR__ . '/../../../config.php');
 
 $warningthreshhold = get_config('tool_heartbeat', 'logwarningthresh'); // Logins.
 $criticalthreshold = get_config('tool_heartbeat', 'logcriticalthresh'); // Logins.
@@ -54,8 +54,8 @@ if (isset($argv)) {
         array_pop($_SERVER['argv']);
     }
 
-    require $dirroot . 'config.php';
-    require_once $CFG->libdir . '/clilib.php';
+    require($dirroot . 'config.php');
+    require_once($CFG->libdir . '/clilib.php');
 
     list($options, $unrecognized) = cli_get_params(
         array(
@@ -112,22 +112,19 @@ $format = '%b %d %H:%M:%S';
 
 $now = userdate(time(), $format);
 
-function send_good($msg)
-{
+function send_good($msg) {
     global $now;
     printf("OK: $msg\n(Checked $now)\n");
     exit(0);
 }
 
-function send_warning($msg)
-{
+function send_warning($msg) {
     global $now;
     printf("WARNING: $msg\n(Checked $now)\n");
     exit(1);
 }
 
-function send_critical($msg)
-{
+function send_critical($msg) {
     global $now;
     printf("CRITICAL: $msg\n(Checked $now)\n");
     exit(2);
@@ -148,15 +145,13 @@ if ($testing == 'error') {
     send_warning("Moodle this is a test $CFG->wwwroot/admin/settings.php?section=tool_heartbeat\n");
 }
 
-
-    $sql_string = 'SELECT count(*) AS logincount,other, origin, ip FROM mdl_logstore_standard_log WHERE target = "user_login" AND timecreated > ' . $checktime . ' GROUP BY other, origin, ip order BY logincount desc';
-    $tablequery = $DB->get_records_sql($sql_string);
+    $sqlstring = 'SELECT count(*) AS logincount,other, origin, ip FROM mdl_logstore_standard_log WHERE target = "user_login" 
+    AND timecreated > ' . $checktime . ' GROUP BY other, origin, ip order BY logincount desc';
+    $tablequery = $DB->get_records_sql($sqlstring);
 
     $faildlogcount = parse_log_data($tablequery);
 
-
-function parse_log_data($tablequery)
-{
+function parse_log_data($tablequery) {
     $count = 0;
     $topip;
     $topuser;
@@ -166,15 +161,7 @@ function parse_log_data($tablequery)
 
         $currentcount = $row->logincount;
 
-        if ($currentcount > $topcount) {
-            $topcount = $currentcount;
-            $topip = $row->ip;
-            $topuser = $row->other;
-        }
-
         $count += $currentcount;
-
-        //echo "$currentcount failed login attempts by $row->other from IP: $row->ip \n";
     }
 
     return $count;
@@ -182,22 +169,15 @@ function parse_log_data($tablequery)
 
     test_log_data($faildlogcount, $criticalthreshold, $warningthreshhold, $logindelay);
 
-function test_log_data($count, $criticalthreshold, $warningthreshhold, $logindelay)
-{
+function test_log_data($count, $criticalthreshold, $warningthreshhold, $logindelay) {
 
     if ($count > $criticalthreshold) {
         $timeinmins = $logindelay / 60;
-        //printf("CRITICAL: $topcount failed login attempts by $topuser from IP: $topip\n");
         send_critical("$count failed logins in the last $timeinmins minute(s).");
     } else if ($count > $warningthreshhold) {
         $timeinmins = $logindelay / 60;
-
         send_warning("$count Failed logins in the last $timeinmins minute(s).");
     } else {
-        //echo "$logindelay\n";
-        //echo "$criticalthreshold\n";
-        //echo "$warningthreshhold\n";
-
         send_good("Normal Login behaivour\n");
     }
 
