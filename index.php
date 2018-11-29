@@ -1,4 +1,5 @@
 <?php
+
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -21,142 +22,122 @@
  * @copyright  2014 Brendan Heywood <brendan@catalyst-au.net>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
 // Make sure varnish doesn't cache this. But it still might so go check it!
 header('Pragma: no-cache');
 header('Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate, proxy-revalidate');
 header('Expires: Tue, 04 Sep 2012 05:32:29 GMT');
 
-// Set this manually to true as needed.
-if (false) {
-    print "Server is in MAINTENANCE";
-    exit;
-}
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', '/moodle_static/error_log.' . date('Ymd'));
+error_reporting(E_ALL | E_STRICT);
 
+require_once('lib.php');
 
-$fullcheck = false;
+$debug = false;
+$debug && error_log(__FILE__ . '::' . __LINE__ . '::Started');
 
-if (isset($argv) && $argv[0]) {
-    define('CLI_SCRIPT', true);
-    $fullcheck = count($argv) > 1 && $argv[1] === 'fullcheck';
-} else {
-    define('NO_MOODLE_COOKIES', true);
-    $fullcheck = isset($_GET['fullcheck']);
-}
-define('NO_UPGRADE_CHECK', true);
-define('ABORT_AFTER_CONFIG', true);
+//Collect test results here
+//For each test result:
+//  - The testname is required to meet Nagios specifications
+//  - Testname will be converted to ALL_CAPS and ONE_WORD for easier automated log parsing/processing
+$test_results = array();
 
-/**
- * Checks if the command line maintenance mode has been enabled. Skip the config bootstrapping.
- *
- * @param string $configfile The relative path for config.php
- * @return bool True if climaintenance.html is found.
- */
-function check_climaintenance($configfile) {
-    $content = file_get_contents($configfile);
-    $content = preg_replace("#[^!:]//#", "\n//", $content);  // Set comments to be on newlines, replace '//' with '\n//', where // does not start with :
-    $content = preg_replace("/;/", ";\n", $content);         // Split up statements, replace ';' with ';\n'
-    $content = preg_replace("/^[\s]+/m", "", $content);      // Removes all initial whitespace and newlines.
+require_once(__DIR__ . '/classes/TestResult.php');
+require_once(__DIR__ . '/classes/PerfInfo.php');
+require_once(__DIR__ . '/classes/HeartbeatTests.php');
 
-    $re = '/^\$CFG->dataroot\s+=\s+["\'](.*?)["\'];/m';  // Lines starting with $CFG->dataroot
-    preg_match($re, $content, $matches);
-    if (!empty($matches)) {
-        $climaintenance = $matches[count($matches) - 1] . '/climaintenance.html';
+//------------------------------------------------------------------------------
+//Test: The most basic health check possible - is this health check started?
+//This tells us PHP, the underlying httpd (apache, nginx etc), and the server itself (OS down to hardware) is working
+$label = 'HEARTBEAT_START';
+$test_results[] = new TestResult($label, STATUS_OK, 'started', PerfInfo::get_usermicrotime());
+$debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$label} \$test_results=" . print_r($test_results, true));
+//------------------------------------------------------------------------------
 
-        if (file_exists($climaintenance)) {
-            return true;
-        }
+$is_cli = HeartbeatTests::is_cli();
+
+try {
+
+    //GET params defaults
+    $fullcheck = false;
+    if ($is_cli) {
+        //Make sure Moodle knows this is CLI
+        define('CLI_SCRIPT', true);
+        $fullcheck = count($argv) > 1 && $argv[1] === 'fullcheck';
+    } else {
+        define('NO_MOODLE_COOKIES', true);
+        $fullcheck = isset($_GET['fullcheck']);
     }
 
-    return false;
-}
+    define('NO_UPGRADE_CHECK', true);
+    define('ABORT_AFTER_CONFIG', true);
+    define('HEARTBEAT', true);
+    $debug && error_log(__FILE__ . '::' . __LINE__ . '::Done CLI check');
 
-if (check_climaintenance(__DIR__ . '/../../../config.php') === true) {
-    print "Server is in MAINTENANCE<br>\n";
-    exit;
-}
+    //Point this at Moodle's config.php
+    define('PATH_TO_MOODLE_CONFIG', __DIR__ . '/../../../config.php');
 
-require_once(__DIR__ . '/../../../config.php');
-global $CFG;
+    //------------------------------------------------------------------------------
+    //Test: Is Moodle in maintenance mode?
+    $label = 'CLI_MAINTENANCE_MODE';
+    $heartbeat_test = !HeartbeatTests::is_climaintenance_enabled(PATH_TO_MOODLE_CONFIG);
+    $test_results[] = new TestResult($label, ($heartbeat_test ? STATUS_OK : STATUS_WARNING), ($heartbeat_test ? 'not enabled' : 'enabled'), PerfInfo::get_usermicrotime());
+    $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$label} \$test_results=" . print_r($test_results, true));
+    //------------------------------------------------------------------------------
 
-$status = "";
-
-/**
- * Return an error that ELB will pick up
- *
- * @param string $reason
- */
-function failed($reason) {
-    // Status for ELB, will cause ELB to remove instance.
-    header("HTTP/1.0 503 Service unavailable: failed $reason check");
-    // Status for the humans.
-    print "Server is DOWN<br>\n";
-    echo "Failed: $reason";
-    exit;
-}
-
-$testfile = $CFG->dataroot . "/tool_heartbeat.test";
-$size = file_put_contents($testfile, '1');
-if ($size !== 1) {
-    failed('sitedata not writable');
-}
-
-if (file_exists($testfile)) {
-    $status .= "sitedata OK<br>\n";
-} else {
-    failed('sitedata not readable');
-}
-
-$sessionhandler = (property_exists($CFG, 'session_handler_class') && $CFG->session_handler_class === '\core\session\memcached');
-$savepath = property_exists($CFG, 'session_memcached_save_path');
-
-if ($sessionhandler && $savepath) {
-    require_once($CFG->libdir . '/classes/session/util.php');
-    $servers = \core\session\util::connection_string_to_memcache_servers($CFG->session_memcached_save_path);
+    $debug && error_log(__FILE__ . '::' . __LINE__ . '::About to require_once ' . PATH_TO_MOODLE_CONFIG);
     try {
-        $memcached = new \Memcached();
-        $memcached->addServers($servers);
-        $stats = $memcached->getStats();
-        $memcached->quit();
-
-        $addr = $servers[0][0];
-        $port = $servers[0][1];
-
-        if ($stats[$addr . ':' . $port]['uptime'] > 0) {
-            $status .= "session memcached OK<br>\n";
-        } else {
-            failed('sessions memcached');
-        }
-
+        require_once(__DIR__ . '/../../../config.php');
     } catch (Exception $e) {
-        failed('sessions memcached');
-    } catch (Throwable $e) {
-        failed('sessions memcached');
+        die('FAILED to load Moodle config.php');
+    }
+    $debug && error_log(__FILE__ . '::' . __LINE__ . '::Loaded Moodle config.php');
+
+    global $CFG;
+    if (empty($CFG)) {
+        throw new Exception('Moodle $CFG must be defined; make sure you have includes config.php');
+    }
+    if (empty($CFG->dataroot)) {
+        throw new Exception('Moodle $CFG must define dataroot');
     }
 
-}
-
-// Optionally check database configuration and access (slower).
-if ($fullcheck) {
-    try {
+    //------------------------------------------------------------------------------
+    //Test: Is the dataroot writable?
+    $label = 'MOODLEDATA';
+    $heartbeat_test = HeartbeatTests::is_moodledata_writable($CFG->dataroot);
+    $test_results[] = new TestResult($label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'writable' : $CFG->dataroot . ' not writable'), PerfInfo::get_usermicrotime());
+    $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$label} \$test_results=" . print_r($test_results, true));
+    //------------------------------------------------------------------------------
+    // Optionally check database configuration and access (slower).
+    if ($fullcheck) {
+        //------------------------------------------------------------------------------
+        //Test: Is the DB available?
         define('ABORT_AFTER_CONFIG_CANCEL', true);
-        require($CFG->dirroot . '/lib/setup.php');
+        require_once($CFG->dirroot . '/lib/setup.php');
         global $DB;
 
-        // Try to get the first record from the user table.
-        $user = $DB->get_record_sql('SELECT id FROM {user} WHERE 0 < id ', null, IGNORE_MULTIPLE);
-        if ($user) {
-            $status .= "database OK<br>\n";
-        } else {
-            failed('no users in database');
-        }
-    } catch (Exception $e) {
-        failed('database error');
-    } catch (Throwable $e) {
-        failed('database error');
+        $label = 'MOODLE_DB';
+        $heartbeat_test = HeartbeatTests::is_db_writable($DB);
+        $test_results[] = new TestResult($label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'available' : ' not available'), PerfInfo::get_usermicrotime());
+        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$label} \$test_results=" . print_r($test_results, true));
     }
+    //------------------------------------------------------------------------------
+    //If we get here we probably have not hit a fatal exception
+    heartbeat_print_test_results($test_results, $label);
+
+    $debug && error_log(__FILE__ . '::' . __LINE__ . '::Done all tests');
+    //------------------------------------------------------------------------------
+} catch (Exception $e) {
+    if ($is_cli) {
+        error_log(print_r($e, true));
+    } else {
+        error_log(print_r($e, true));
+
+        echo 'Hit an exception' . BRNL;
+        echo '<PRE>' . print_r($e, true) . '</PRE>';
+    }
+
+    //Exit with error code
+    exit(1);
 }
-
-print "Server is ALIVE<br>\n";
-print $status;
-
