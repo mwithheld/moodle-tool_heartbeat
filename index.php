@@ -27,74 +27,149 @@ header('Pragma: no-cache');
 header('Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate, proxy-revalidate');
 header('Expires: Tue, 04 Sep 2012 05:32:29 GMT');
 
-ini_set('display_errors', 1);
-ini_set('log_errors', 1);
-ini_set('error_log', '/moodle_static/error_log.' . date('Ymd'));
-error_reporting(E_ALL | E_STRICT);
+function setup_error_display() {
+    ini_set('display_errors', 1);
+    ini_set('log_errors', 1);
+    ini_set('error_log', '/moodle_static/error_log.' . date('Ymd'));
+    ini_set('display_startup_errors', 1);
+    error_reporting(E_ALL | E_STRICT);
+}
 
-require_once('lib.php');
+setup_error_display();
 
-$debug = false;
+require_once(__DIR__ . '/lib.php');
+
+$debug = true;
 $debug && error_log(__FILE__ . '::' . __LINE__ . '::Started');
 
 //Collect test results here
 //For each test result:
 //  - The testname is required to meet Nagios specifications
 //  - Testname will be converted to ALL_CAPS and ONE_WORD for easier automated log parsing/processing
-$test_results = array();
-
-require_once(__DIR__ . '/classes/TestResult.php');
-require_once(__DIR__ . '/classes/PerfInfo.php');
+$heartbeat_test_results = array();
+require_once(__DIR__ . '/classes/HeartbeatTestResult.php');
+require_once(__DIR__ . '/classes/HeartbeatPerfInfo.php');
 require_once(__DIR__ . '/classes/HeartbeatTests.php');
+
+
+$heartbeat_is_cli = heartbeat_is_cli();
 
 //------------------------------------------------------------------------------
 //Test: The most basic health check possible - is this health check started?
 //This tells us PHP, the underlying httpd (apache, nginx etc), and the server itself (OS down to hardware) is working
-$label = 'HEARTBEAT_START';
-$test_results[] = new TestResult($label, STATUS_OK, 'started', PerfInfo::get_usermicrotime());
-$debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$label} \$test_results=" . print_r($test_results, true));
+$heartbeat_label = 'HEARTBEAT_START';
+if ((!$heartbeat_is_cli && (empty($_GET) || ( isset($_GET[$heartbeat_label]) && ($_GET[$heartbeat_label] || $_GET['ALL']))) ) ||
+        ( $heartbeat_is_cli && !empty(getopt('', array("$heartbeat_label::"))[$heartbeat_label]) )
+) {
+    $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, STATUS_OK, 'started', HeartbeatPerfInfo::get_usermicrotime());
+    $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+}
 //------------------------------------------------------------------------------
 
-$is_cli = HeartbeatTests::is_cli();
 
 try {
-
-    //GET params defaults
-    $fullcheck = false;
-    if ($is_cli) {
-        //Make sure Moodle knows this is CLI
-        define('CLI_SCRIPT', true);
-        $fullcheck = count($argv) > 1 && $argv[1] === 'fullcheck';
-    } else {
-        define('NO_MOODLE_COOKIES', true);
-        $fullcheck = isset($_GET['fullcheck']);
-    }
-
     define('NO_UPGRADE_CHECK', true);
     define('ABORT_AFTER_CONFIG', true);
-    define('HEARTBEAT', true);
-    $debug && error_log(__FILE__ . '::' . __LINE__ . '::Done CLI check');
 
     //Point this at Moodle's config.php
-    define('PATH_TO_MOODLE_CONFIG', __DIR__ . '/../../../config.php');
+    define('HEARTBEAT_MOODLE_ROOT_DIR', realpath(dirname(dirname(dirname(__DIR__)))));
+
+    $debug && error_log(__FILE__ . '::' . __LINE__ . '::Done CLI check');
+
+    //Params and defaults
+    //Makes a copy of the array by default
+    $tests_to_run = array(
+        'ALL'                  => true,
+        'HEARTBEAT_START'      => false,
+        'CLI_MAINTENANCE_MODE' => false,
+        'MOODLEDATA'           => false,
+        'MOODLE_DB_READABLE'   => false,
+        'REDIS'                => false,
+        'CACHE_CONFIG'         => false,
+        'DB_MAINTENANCE_MODE'  => false,
+        'UPGRADE_PENDING'      => false,
+        'HEARTBEAT'            => true,
+    );
+
+    //Do not setup cookies
+    !$heartbeat_is_cli && define('NO_MOODLE_COOKIES', true);
+    //Make sure Moodle knows this is CLI
+    $heartbeat_is_cli && define('CLI_SCRIPT', true);
+    //config.php is requires for moodlelib.php to load correctly
+    require_once(HEARTBEAT_MOODLE_ROOT_DIR . '/config.php');
+    $debug && $CFG->debug = (E_ALL | E_STRICT);   // === DEBUG_DEVELOPER
+    $debug && error_log(__FILE__ . '::' . __LINE__ . '::Loaded Moodle config.php');
+
+    if ($heartbeat_is_cli) {
+
+        require_once(HEARTBEAT_MOODLE_ROOT_DIR . '/lib/clilib.php');
+
+        //Allow the help option
+        $tests_to_run['help'] = false;
+
+        //Psrse CLI arguments into $_GET
+        //parse_str(implode('&', array_slice($argv, 1)), $_GET);
+        // now get cli options: options, unrecognised as optionlongname=>value
+        list($tests_to_run, $unrecognized_options) = cli_get_params($tests_to_run, array('h' => 'help'));
+
+
+        if ($unrecognized_options) {
+            $unrecognized_options = implode("\n  ", $unrecognized_options);
+            cli_error(get_string('cliunknowoption', 'admin', $unrecognized_options));
+        }
+
+        if ($tests_to_run['help']) {
+            echo
+            "Run the Moodle heartbeat, which checks various parts for proper functionality.
+Output is nagios-compliant on each line
+Options:
+  --ALL                      (default true) Run all tests regardless of the below parameters
+  --HEARTBEAT_START          (default false) Just make sure this script can run, then exit
+  --CLI_MAINTENANCE_MODE     (default false) Check if the CLI-set maintenance mode (.maintenance file in the root) is enabled
+  --MOODLEDATA               (default false) Check if the moodledata folder is writable
+  --MOODLE_DB_READABLE       (default false) Check the if the Moodle DB is readable
+  --REDIS                    (default false) Check if Redis is pingable
+  --CACHE_CONFIG             (default false) Check the cache config file is present and sensible
+  --DB_MAINTENANCE_MODE      (default false) Check if the DB-set maintenance mode is enabled
+  --UPGRADE_PENDING          (default false) Check if Moodle thinks an upgrade is pending
+  --HEARTBEAT                (default true) Check if this heartbeat script finished and shows overall result as the top line
+
+Example:
+\$ sudo -u www-data /usr/bin/php /admin/tool/heartbeat/index.php  --ALL=0 --HEARTBEAT_START=1
+";
+            die();
+        }
+    } else {
+        require_once(HEARTBEAT_MOODLE_ROOT_DIR . '/lib/moodlelib.php');
+        $debug && error_log(__FILE__ . '::' . __LINE__ . '::Done require moodlelib.php');
+
+        foreach ($tests_to_run as $test_name => $default_value) {
+            $tests_to_run[$test_name] = optional_param($test_name, $default_value, PARAM_BOOL);
+        }
+    }
+
+    if ($tests_to_run['ALL']) {
+        foreach ($tests_to_run as $test_name => $value) {
+            $tests_to_run[$test_name] = 1;
+        }
+    }
+
+    //die('Built $tests_to_run=<PRE>' . print_r($tests_to_run, true) . '</PRE>');
+    $debug && error_log(__FILE__ . '::' . __LINE__ . "::Built \$tests_to_run=" . print_r($tests_to_run, true));
 
     //------------------------------------------------------------------------------
     //Test: Is Moodle in maintenance mode?
-    $label = 'CLI_MAINTENANCE_MODE';
-    $heartbeat_test = !HeartbeatTests::is_climaintenance_enabled(PATH_TO_MOODLE_CONFIG);
-    $test_results[] = new TestResult($label, ($heartbeat_test ? STATUS_OK : STATUS_WARNING), ($heartbeat_test ? 'not enabled' : 'enabled'), PerfInfo::get_usermicrotime());
-    $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$label} \$test_results=" . print_r($test_results, true));
+    $heartbeat_label = 'CLI_MAINTENANCE_MODE';
+    if ($tests_to_run[$heartbeat_label]) {
+        $heartbeat_test = !HeartbeatTests::is_climaintenance_enabled(HEARTBEAT_MOODLE_ROOT_DIR);
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_WARNING), ($heartbeat_test ? 'not enabled' : 'enabled'), HeartbeatPerfInfo::get_usermicrotime());
+        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+    }
     //------------------------------------------------------------------------------
 
-    $debug && error_log(__FILE__ . '::' . __LINE__ . '::About to require_once ' . PATH_TO_MOODLE_CONFIG);
-    try {
-        require_once(__DIR__ . '/../../../config.php');
-    } catch (Exception $e) {
-        die('FAILED to load Moodle config.php');
-    }
-    $debug && error_log(__FILE__ . '::' . __LINE__ . '::Loaded Moodle config.php');
 
     global $CFG;
+    //Sanity checks
     if (empty($CFG)) {
         throw new Exception('Moodle $CFG must be defined; make sure you have includes config.php');
     }
@@ -104,36 +179,84 @@ try {
 
     //------------------------------------------------------------------------------
     //Test: Is the dataroot writable?
-    $label = 'MOODLEDATA';
-    $heartbeat_test = HeartbeatTests::is_moodledata_writable($CFG->dataroot);
-    $test_results[] = new TestResult($label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'writable' : $CFG->dataroot . ' not writable'), PerfInfo::get_usermicrotime());
-    $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$label} \$test_results=" . print_r($test_results, true));
-    //------------------------------------------------------------------------------
-    // Optionally check database configuration and access (slower).
-    if ($fullcheck) {
-        //------------------------------------------------------------------------------
-        //Test: Is the DB available?
-        define('ABORT_AFTER_CONFIG_CANCEL', true);
-        require_once($CFG->dirroot . '/lib/setup.php');
-        global $DB;
-
-        $label = 'MOODLE_DB';
-        $heartbeat_test = HeartbeatTests::is_db_writable($DB);
-        $test_results[] = new TestResult($label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'available' : ' not available'), PerfInfo::get_usermicrotime());
-        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$label} \$test_results=" . print_r($test_results, true));
+    $heartbeat_label = 'MOODLEDATA';
+    if ($tests_to_run[$heartbeat_label]) {
+        $heartbeat_test = HeartbeatTests::is_moodledata_writable($CFG->dataroot);
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'writable' : $CFG->dataroot . ' not writable'), HeartbeatPerfInfo::get_usermicrotime());
+        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
+    //
+    //------------------------------------------------------------------------------
+    //Test: Is the DB available?
+    define('ABORT_AFTER_CONFIG_CANCEL', true);
+    require_once($CFG->dirroot . '/lib/setup.php');
+    global $DB;
+
+    $heartbeat_label = 'MOODLE_DB_READABLE';
+    if ($tests_to_run[$heartbeat_label]) {
+        $heartbeat_test = HeartbeatTests::is_db_readable($DB);
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'available' : 'not available'), HeartbeatPerfInfo::get_usermicrotime());
+        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+    }
+    //------------------------------------------------------------------------------
+    //
+    //------------------------------------------------------------------------------
+    //Test: If Redis is used, is it available?
+    $heartbeat_redis_class_exists = class_exists('Redis') && is_readable($CFG->dirroot . '/lib/classes/session/redis.php');
+    $heartbeat_label = 'REDIS';
+    if ($tests_to_run[$heartbeat_label] && isset($CFG->session_handler_class) && ($CFG->session_handler_class === '\core\session\redis') && $heartbeat_redis_class_exists) {
+        $heartbeat_test = HeartbeatTests::is_redis_readable($CFG);
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'available' : 'not available'), HeartbeatPerfInfo::get_usermicrotime());
+        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+    }
+    //------------------------------------------------------------------------------
+    //
+    //------------------------------------------------------------------------------
+    //Test: Is a Moodle upgrade pending?
+    $heartbeat_label = 'CACHE_CONFIG';
+    if ($tests_to_run[$heartbeat_label]) {
+        $heartbeat_test = HeartbeatTests::check_muc_config($CFG);
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'cache config OK' : 'cache config missing or corrupt'), HeartbeatPerfInfo::get_usermicrotime());
+        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+    }
+    //------------------------------------------------------------------------------
+    //
+    //------------------------------------------------------------------------------
+    //Test: Is the DB maintenance mode is enabled?
+    $heartbeat_label = 'DB_MAINTENANCE_MODE';
+    if ($tests_to_run[$heartbeat_label]) {
+        $heartbeat_test = HeartbeatTests::is_dbmaintenance_enabled($CFG);
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_WARNING), ($heartbeat_test ? 'not enabled' : 'enabled'), HeartbeatPerfInfo::get_usermicrotime());
+        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+    }
+    //------------------------------------------------------------------------------
+    //
+    //------------------------------------------------------------------------------
+    //Test: Is a Moodle upgrade pending?
+    $heartbeat_label = 'UPGRADE_PENDING';
+    if ($tests_to_run[$heartbeat_label]) {
+        require_once($CFG->dirroot . '/lib/moodlelib.php');
+        $heartbeat_test = moodle_needs_upgrading();
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_WARNING), ($heartbeat_test ? 'no upgrade needed' : 'upgrade is pending'), HeartbeatPerfInfo::get_usermicrotime());
+        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+    }
+    //------------------------------------------------------------------------------
+    //
     //If we get here we probably have not hit a fatal exception
-    heartbeat_print_test_results($test_results, $label);
+    if ($heartbeat_test_results) {
+        heartbeat_print_test_results($heartbeat_test_results, $heartbeat_label);
+    } else {
+        echo 'No results' . ($heartbeat_is_cli ? '' : BRNL);
+    }
 
     $debug && error_log(__FILE__ . '::' . __LINE__ . '::Done all tests');
     //------------------------------------------------------------------------------
 } catch (Exception $e) {
-    if ($is_cli) {
-        error_log(print_r($e, true));
-    } else {
-        error_log(print_r($e, true));
+    $debug && error_log(__FILE__ . '::' . __LINE__ . '::In the main Exception handler');
+    error_log(print_r($e, true));
 
+    if (!$heartbeat_is_cli) {
         echo 'Hit an exception' . BRNL;
         echo '<PRE>' . print_r($e, true) . '</PRE>';
     }
@@ -141,3 +264,4 @@ try {
     //Exit with error code
     exit(1);
 }
+unset($debug);

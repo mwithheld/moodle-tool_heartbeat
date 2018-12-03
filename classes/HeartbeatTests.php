@@ -3,15 +3,6 @@
 class HeartbeatTests {
 
     /**
-     * Check if PHP is running from the command line
-     * @return true if PHP is running from the command line
-     */
-    static function is_cli() {
-        //Note cli-server is PHP's built-in webserver
-        return php_sapi_name() == 'cli';
-    }
-
-    /**
      * Checks if the command line maintenance mode has been enabled
      *
      * @param string $configfile The relative path for config.php
@@ -38,6 +29,10 @@ class HeartbeatTests {
         return false;
     }
 
+    static function is_dbmaintenance_enabled($configfile) {
+        return isset($configfile->maintenance_enabled) ? $configfile->maintenance_enabled : false;
+    }
+
     static function is_moodledata_writable($path_to_moodledata) {
         $testFile = "{$path_to_moodledata}/tool_heartbeat.test";
 
@@ -53,13 +48,13 @@ class HeartbeatTests {
         return $result;
     }
 
-    static function is_db_writable(/* moodle_database */ $moodle_db) {
+    static function is_db_readable(/* moodle_database */ $moodle_db) {
         $debug = false;
         $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started');
 
         try {
             // Try to get the first record from the user table.
-            if (false) {// && $moodle_db->get_record_sql('SELECT id FROM {user} WHERE id > 0', null, IGNORE_MULTIPLE)) {
+            if ($moodle_db->get_record_sql('SELECT id FROM {user} WHERE id > 0', null, IGNORE_MULTIPLE)) {
                 return true;
             } else {
                 error_log('FATAL: The Moodle DB user table has no users');
@@ -74,4 +69,45 @@ class HeartbeatTests {
         }
     }
 
+    static function is_redis_readable($CFG) {
+        try {
+            $redis = new Redis();
+            $redis->connect($CFG->session_redis_host, $CFG->session_redis_port);
+            //This throws an exception if the ping fails and returns String '+PONG' on success
+            if (!$redis->ping()) {
+                //I put this in here in case the interface changes in the future
+                $is_redis_ready = false;
+            }
+        } catch (Exception $unused) {
+            $is_redis_ready = false;
+            error_log('PHP Fatal error: Redis is not available at ' . __FILE__ . ':' . __LINE__);
+        }
+
+        return $is_redis_ready;
+    }
+
+    static function check_muc_config($CFG) {
+        $result = false;
+        
+        try {
+            require_once("{$CFG->dataroot}/muc/config.php");
+            if( 
+                    !isset($configuration) ||
+                    (!isset($configuration['siteidentifier']) || !is_string($configuration['siteidentifier'])) ||
+                    (!isset($configuration['stores']) || !is_array($configuration['stores']) || empty($configuration['stores'])) ||
+                    (!isset($configuration['modemappings']) || !is_array($configuration['modemappings']) || empty($configuration['modemappings'])) ||
+                    (!isset($configuration['definitions']) || !is_array($configuration['definitions']) || empty($configuration['definitions'])) ||
+                    (!isset($configuration['definitionmappings']) || !is_array($configuration['definitionmappings']) /* It's OK if this is empty: || empty($configuration['definitionmappings']) */)
+            ) {
+                $result = false;
+            } else {
+                $result = true;
+            }
+        } catch (Exception $e) {
+            $result = false;
+            error_log('PHP Fatal error: MUC config is not available or corrupt at ' . __FILE__ . ':' . __LINE__);
+        }
+        
+        return $result;
+    }
 }
