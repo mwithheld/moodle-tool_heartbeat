@@ -29,8 +29,24 @@ class HeartbeatTests {
         return false;
     }
 
-    static function is_dbmaintenance_enabled($configfile) {
-        return isset($configfile->maintenance_enabled) ? $configfile->maintenance_enabled : false;
+    static function is_dbmaintenance_enabled() {
+        global $CFG;
+
+        $debug = false;
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started - empty($CFG)=' . empty($CFG));
+
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Checking $CFG->maintenance_enabled=' . print_r($CFG->maintenance_enabled, true));
+        $result = isset($CFG->maintenance_enabled) && !empty($CFG->maintenance_enabled);
+        return $result;
+    }
+
+    static function is_upgrade_pending() {
+        global $CFG;
+
+        $debug = false;
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started - empty($CFG)=' . empty($CFG));
+
+        return moodle_needs_upgrading();
     }
 
     static function is_moodledata_writable($path_to_moodledata) {
@@ -48,35 +64,51 @@ class HeartbeatTests {
         return $result;
     }
 
-    static function is_db_readable(/* moodle_database */ $moodle_db) {
+    static function is_db_readable() {
+        global $DB;
+
         $debug = false;
-        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started');
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started - empty($DB)=' . empty($DB));
 
         try {
             // Try to get the first record from the user table.
-            if ($moodle_db->get_record_sql('SELECT id FROM {user} WHERE id > 0', null, IGNORE_MULTIPLE)) {
+            if ($DB->get_record_sql('SELECT id FROM {user} WHERE id > 0', null, IGNORE_MULTIPLE)) {
                 return true;
             } else {
-                error_log('FATAL: The Moodle DB user table has no users');
+                error_log('FATAL error: The Moodle DB user table has no users');
                 return false;
             }
         } catch (Exception $e) {
-            error_log('FATAL: The Moodle DB is not available');
+            error_log('FATAL Exception: The Moodle DB is not available');
+            $debug && error_log(print_r($e, true));
             return false;
         } catch (Throwable $e) {
-            error_log('FATAL: The Moodle DB is not available');
+            error_log('FATAL Throwable: The Moodle DB is not available');
+            $debug && error_log(print_r($e, true));
             return false;
         }
     }
 
-    static function is_redis_readable($CFG) {
+    static function is_redis_readable() {
+        global $CFG;
+
+        $debug = false;
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started - empty($CFG)=' . empty($CFG));
+
         try {
             $redis = new Redis();
-            $redis->connect($CFG->session_redis_host, $CFG->session_redis_port);
-            //This throws an exception if the ping fails and returns String '+PONG' on success
-            if (!$redis->ping()) {
-                //I put this in here in case the interface changes in the future
+            $success = $redis->connect($CFG->session_redis_host, $CFG->session_redis_port);
+            $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . "::Host={$CFG->session_redis_host}; Port=${$CFG->session_redis_port}; Connection success=" . $success);
+
+            if (!$success || !$redis->ping()) {
+                $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Connect failed');
                 $is_redis_ready = false;
+            } else if (!$redis->ping()) {
+                //This throws an exception if the ping fails and returns String '+PONG' on success
+                $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Ping failed');
+                $is_redis_ready = false;
+            } else {
+                $is_redis_ready = true;
             }
         } catch (Exception $unused) {
             $is_redis_ready = false;
@@ -87,11 +119,20 @@ class HeartbeatTests {
     }
 
     static function check_muc_config($CFG) {
+        global $CFG;
+
+        $debug = false;
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started - empty($CFG)=' . empty($CFG));
+
         $result = false;
-        
+
         try {
-            require_once("{$CFG->dataroot}/muc/config.php");
-            if( 
+            $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . "::About to require_once={$CFG->dataroot}/muc/config.php");
+            //Do not require_once here b/c Moodle has already loaded this config, and require_once will mean $configuration is empty
+            require("{$CFG->dataroot}/muc/config.php");
+            $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Loaded the MUC config; $configuration=' . print_r($configuration, true));
+
+            if (
                     !isset($configuration) ||
                     (!isset($configuration['siteidentifier']) || !is_string($configuration['siteidentifier'])) ||
                     (!isset($configuration['stores']) || !is_array($configuration['stores']) || empty($configuration['stores'])) ||
@@ -99,15 +140,17 @@ class HeartbeatTests {
                     (!isset($configuration['definitions']) || !is_array($configuration['definitions']) || empty($configuration['definitions'])) ||
                     (!isset($configuration['definitionmappings']) || !is_array($configuration['definitionmappings']) /* It's OK if this is empty: || empty($configuration['definitionmappings']) */)
             ) {
+                $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::MUC config sanity check failed');
                 $result = false;
             } else {
                 $result = true;
             }
         } catch (Exception $e) {
-            $result = false;
             error_log('PHP Fatal error: MUC config is not available or corrupt at ' . __FILE__ . ':' . __LINE__);
+            $result = false;
         }
-        
+
         return $result;
     }
+
 }
