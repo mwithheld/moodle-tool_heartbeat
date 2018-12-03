@@ -218,7 +218,7 @@ Example:
     if ($tests_to_run[$heartbeat_label]) {
         define('MOODLE_INTERNAL', true);
         $heartbeat_test = HeartbeatTests::check_muc_config();
-        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'cache config OK' : 'cache config missing or corrupt'), HeartbeatPerfInfo::get_usermicrotime());
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'OK' : 'missing or corrupt'), HeartbeatPerfInfo::get_usermicrotime());
         $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
