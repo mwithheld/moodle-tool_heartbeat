@@ -65,7 +65,7 @@ function heartbeat_print_test_results(Array $all_test_results, $format = 'nagios
     global $tests_to_run;
     $heartbeat_label = 'HEARTBEAT';
     if ($tests_to_run[$heartbeat_label]) {
-        $overallTestResult = new HeartbeatTestResult($heartbeat_label, STATUS_OK, 'success', HeartbeatPerfInfo::get_usermicrotime());
+        $overallTestResult = new HeartbeatTestResult($heartbeat_label, STATUS_OK, 'success '.gethostname(), HeartbeatPerfInfo::get_usermicrotime());
         $reason = 'Because of this test: ';
 
         //If we have a warning, show the first one as our overall failure message
