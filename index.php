@@ -39,7 +39,7 @@ setup_error_display();
 
 require_once(__DIR__ . '/lib.php');
 
-$debug = true;
+$debug = false;
 $debug && error_log(__FILE__ . '::' . __LINE__ . '::Started');
 
 //Collect test results here
