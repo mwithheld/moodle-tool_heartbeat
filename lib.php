@@ -46,7 +46,7 @@ function heartbeat_get_array_filtered($aFilterKey, $aFilterValue, $array) {
  * @throws InvalidArgumentException
  */
 function heartbeat_print_test_result(HeartbeatTestResult $test_result, $format = 'nagios') {
-    $debug = true;
+    $debug = false;
     $debug && error_log(__FUNCTION__ . '::Started with $test_result=' . print_r($test_result, true));
 
     if (empty($test_result)) {
@@ -59,7 +59,7 @@ function heartbeat_print_test_result(HeartbeatTestResult $test_result, $format =
 }
 
 function heartbeat_print_test_results(Array $all_test_results, $format = 'nagios') {
-    $debug = true;
+    $debug = false;
     $debug && error_log(__FUNCTION__ . '::Started with $all_test_results=' . print_r($all_test_results, true));
 
     global $tests_to_run;
