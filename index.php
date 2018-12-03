@@ -27,20 +27,16 @@ header('Pragma: no-cache');
 header('Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate, proxy-revalidate');
 header('Expires: Tue, 04 Sep 2012 05:32:29 GMT');
 
-function setup_error_display() {
-    ini_set('display_errors', 1);
-    ini_set('log_errors', 1);
-    ini_set('error_log', '/moodle_static/error_log.' . date('Ymd'));
-    ini_set('display_startup_errors', 1);
-    error_reporting(E_ALL | E_STRICT);
-}
-
-setup_error_display();
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', '/moodle_static/error_log.' . date('Ymd'));
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL | E_STRICT);
 
 require_once(__DIR__ . '/lib.php');
 
-$debug = false;
-$debug && error_log(__FILE__ . '::' . __LINE__ . '::Started');
+$heartbeat_debug = false;
+$heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . '::Started');
 
 //Collect test results here
 //For each test result:
@@ -62,7 +58,7 @@ if ((!$heartbeat_is_cli && (empty($_GET) || ( isset($_GET[$heartbeat_label]) && 
         ( $heartbeat_is_cli && !empty(getopt('', array("$heartbeat_label::"))[$heartbeat_label]) )
 ) {
     $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, STATUS_OK, 'started', HeartbeatPerfInfo::get_usermicrotime());
-    $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+    $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
 }
 //------------------------------------------------------------------------------
 
@@ -75,7 +71,7 @@ try {
     //Point this at Moodle's config.php
     define('HEARTBEAT_MOODLE_ROOT_DIR', realpath(dirname(dirname(dirname(__DIR__)))));
 
-    $debug && error_log(__FILE__ . '::' . __LINE__ . '::Done CLI check');
+    $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . '::Done CLI check');
 
     //Params and defaults
     //Makes a copy of the array by default
@@ -98,8 +94,8 @@ try {
     $heartbeat_is_cli && define('CLI_SCRIPT', true);
     //config.php is requires for moodlelib.php to load correctly
     require_once(HEARTBEAT_MOODLE_ROOT_DIR . '/config.php');
-    $debug && $CFG->debug = (E_ALL | E_STRICT);   // === DEBUG_DEVELOPER
-    $debug && error_log(__FILE__ . '::' . __LINE__ . '::Loaded Moodle config.php');
+    $heartbeat_debug && $CFG->debug = (E_ALL | E_STRICT);   // === DEBUG_DEVELOPER
+    $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . '::Loaded Moodle config.php');
 
     if ($heartbeat_is_cli) {
 
@@ -142,7 +138,7 @@ Example:
         }
     } else {
         require_once($CFG->dirroot . '/lib/moodlelib.php');
-        $debug && error_log(__FILE__ . '::' . __LINE__ . '::Done require moodlelib.php');
+        $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . '::Done require moodlelib.php');
 
         foreach ($tests_to_run as $test_name => $default_value) {
             $tests_to_run[$test_name] = optional_param($test_name, $default_value, PARAM_BOOL);
@@ -156,7 +152,7 @@ Example:
     }
 
     //die('Built $tests_to_run=<PRE>' . print_r($tests_to_run, true) . '</PRE>');
-    $debug && error_log(__FILE__ . '::' . __LINE__ . "::Built \$tests_to_run=" . print_r($tests_to_run, true));
+    $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Built \$tests_to_run=" . print_r($tests_to_run, true));
 
     //------------------------------------------------------------------------------
     //Test: Is Moodle in maintenance mode?
@@ -164,7 +160,7 @@ Example:
     if ($tests_to_run[$heartbeat_label]) {
         $heartbeat_test = !HeartbeatTests::is_climaintenance_enabled(HEARTBEAT_MOODLE_ROOT_DIR);
         $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_WARNING), ($heartbeat_test ? 'not enabled' : 'enabled'), HeartbeatPerfInfo::get_usermicrotime());
-        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+        $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
 
@@ -184,7 +180,7 @@ Example:
     if ($tests_to_run[$heartbeat_label]) {
         $heartbeat_test = HeartbeatTests::is_moodledata_writable($CFG->dataroot);
         $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'writable' : $CFG->dataroot . ' not writable'), HeartbeatPerfInfo::get_usermicrotime());
-        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+        $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
     //
@@ -197,7 +193,7 @@ Example:
     if ($tests_to_run[$heartbeat_label]) {
         $heartbeat_test = HeartbeatTests::is_db_readable();
         $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'available' : 'not available'), HeartbeatPerfInfo::get_usermicrotime());
-        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+        $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
     //
@@ -208,7 +204,7 @@ Example:
     if ($heartbeat_redis_class_exists && $tests_to_run[$heartbeat_label] && isset($CFG->session_handler_class) && ($CFG->session_handler_class === '\core\session\redis')) {
         $heartbeat_test = HeartbeatTests::is_redis_readable();
         $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'available' : 'not available'), HeartbeatPerfInfo::get_usermicrotime());
-        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+        $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
     //
@@ -219,7 +215,7 @@ Example:
         define('MOODLE_INTERNAL', true);
         $heartbeat_test = HeartbeatTests::check_muc_config();
         $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'OK' : 'missing or corrupt'), HeartbeatPerfInfo::get_usermicrotime());
-        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+        $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
     //
@@ -229,7 +225,7 @@ Example:
     if ($tests_to_run[$heartbeat_label]) {
         $heartbeat_test = !HeartbeatTests::is_dbmaintenance_enabled();
         $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_WARNING), ($heartbeat_test ? 'not enabled' : 'enabled'), HeartbeatPerfInfo::get_usermicrotime());
-        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+        $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
     //
@@ -240,7 +236,7 @@ Example:
         require_once($CFG->dirroot . '/lib/moodlelib.php');
         $heartbeat_test = !HeartbeatTests::is_upgrade_pending();
         $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_WARNING), ($heartbeat_test ? 'no upgrade needed' : 'upgrade is pending'), HeartbeatPerfInfo::get_usermicrotime());
-        $debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
+        $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
     //
@@ -251,10 +247,10 @@ Example:
         echo 'No results' . ($heartbeat_is_cli ? '' : BRNL);
     }
 
-    $debug && error_log(__FILE__ . '::' . __LINE__ . '::Done all tests');
+    $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . '::Done all tests');
     //------------------------------------------------------------------------------
 } catch (Exception $e) {
-    $debug && error_log(__FILE__ . '::' . __LINE__ . '::In the main Exception handler');
+    $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . '::In the main Exception handler');
     error_log(print_r($e, true));
 
     if (!$heartbeat_is_cli) {
@@ -265,4 +261,4 @@ Example:
     //Exit with error code
     exit(1);
 }
-unset($debug);
+unset($heartbeat_debug);
