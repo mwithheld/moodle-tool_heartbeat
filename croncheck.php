@@ -37,7 +37,8 @@ $cronwarn       = 2;   // Hours.
 $delaythreshold = 600; // Minutes.
 $delaywarn      = 60;  // Minutes.
 
-$dirroot = '../../../';
+define('HEARTBEAT_MOODLE_ROOT_DIR', realpath(dirname(dirname(dirname(__DIR__)))));
+$dirroot = HEARTBEAT_MOODLE_ROOT_DIR;
 
 if (isset($argv)) {
     // If run from the CLI.
