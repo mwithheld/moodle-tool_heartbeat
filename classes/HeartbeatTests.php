@@ -9,6 +9,9 @@ class HeartbeatTests {
      * @return bool True if climaintenance.html is found.
      */
     static function is_climaintenance_enabled($configfile) {
+        $debug = false;
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started with $configfile=' . $configfile);
+        
         $content = preg_replace(array(
             '#[^!:]//#', /* Set comments to be on newlines, replace '//' with '\n//', where // does not start with : */
             '/;/', /* Split up statements, replace ';' with ';\n' */
@@ -19,13 +22,17 @@ class HeartbeatTests {
         $matches = array();
         preg_match($re, $content, $matches);
         if (!empty($matches)) {
-            $climaintenance = $matches[count($matches) - 1] . '/climaintenance.html';
+            $dataroot = $matches[count($matches) - 1];
+            $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Found dataroot=' . $dataroot);
+            $climaintenance =  $dataroot . '/climaintenance.html';
 
             if (file_exists($climaintenance)) {
+                $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Found $climaintenance=true');
                 return true;
             }
         }
 
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Found $climaintenance=false');
         return false;
     }
 
@@ -118,7 +125,7 @@ class HeartbeatTests {
         return $is_redis_ready;
     }
 
-    static function check_muc_config($CFG) {
+    static function check_muc_config() {
         global $CFG;
 
         $debug = false;
@@ -151,6 +158,76 @@ class HeartbeatTests {
         }
 
         return $result;
+    }
+
+    function check_cron_tasks() {
+        global $DB;
+        
+        $cronerror  = 6;   // Hours. Threshold for no cron run error in hours
+        $cronwarn       = 2;   // Hours. Threshold for no cron run warn in hours
+        $delaythreshold = 600; // Minutes. Threshold for fail delay cron error in minutes
+        $delaywarn      = 60;  // Minutes. Threshold for fail delay cron warn in minutes
+        
+        $format = '%b %d %H:%M:%S';
+        $now = userdate(time(), $format);
+        
+        //What is the last time the cron ran?
+        $lastcron = $DB->get_field_sql('SELECT MAX(lastruntime) FROM {task_scheduled}');
+        $currenttime = time();
+        $difference = $currenttime - $lastcron;
+        $when = userdate($lastcron, $format);
+        if ( $difference > $cronerror * 60 * 60 ) {
+            return array(false, "Moodle cron ran > {$cronerror} hours ago at {$when}");
+        }
+        if ( $difference > $cronwarn * 60 * 60 ) {
+            return array(false, "Moodle cron ran > {$cronwarn} hours ago at {$when}");
+        }
+        
+        $delay = '';
+        $maxdelay = 0;
+        $tasks = core\task\manager::get_all_scheduled_tasks();
+        $legacylastrun = null;
+        foreach ($tasks as $task) {
+            if ($task->get_disabled()) {
+                continue;
+            }
+            $faildelay = $task->get_fail_delay();
+            if (get_class($task) == 'core\task\legacy_plugin_cron_task') {
+                $legacylastrun = $task->get_last_run_time();
+            }
+            if ($faildelay == 0) {
+                continue;
+            }
+            if ($faildelay > $maxdelay) {
+                $maxdelay = $faildelay;
+            }
+            $delay .= "TASK: " . $task->get_name() . ' (' .get_class($task) . ") Delay: $faildelay\n";
+        }
+//        
+//        
+//        if ( empty($legacylastrun) ) {
+//            send_warning("Moodle legacy task isn't running\n");
+//        }
+//        $minsincelegacylastrun = floor((time() - $legacylastrun) / 60);
+//        $when = userdate($legacylastrun, $format);
+//
+//        if ( $minsincelegacylastrun > 6 * 60) {
+//            send_critical("Moodle legacy task hasn't run in 6 hours\nLast run at $when");
+//        }
+//        if ( $minsincelegacylastrun > 2 * 60) {
+//            send_warning("Moodle legacy task hasn't run in 2 hours\nLast run at $when");
+//        }
+//
+//        $maxminsdelay = $maxdelay / 60;
+//        if ( $maxminsdelay > $options['delayerror'] ) {
+//            send_critical("Moodle task faildelay > {$options['delayerror']} mins\n$delay");
+//
+//        } else if ( $maxminsdelay > $options['delaywarn'] ) {
+//            send_warning("Moodle task faildelay > {$options['delaywarn']} mins\n$delay");
+//        }
+//
+//        send_good("MOODLE CRON RUNNING\n");
+        return array(true, "");
     }
 
 }
