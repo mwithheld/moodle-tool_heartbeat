@@ -206,7 +206,7 @@ Example:
     $heartbeat_label = 'MOODLEDATA';
     if ($tests_to_run[$heartbeat_label]) {
         $heartbeat_test = HeartbeatTests::is_moodledata_writable($CFG->dataroot);
-        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'writable' : $CFG->dataroot . ' not writable'), HeartbeatPerfInfo::get_usermicrotime());
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'writable' : $CFG->dataroot . ' is not writable'), HeartbeatPerfInfo::get_usermicrotime());
         $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
@@ -217,7 +217,7 @@ Example:
     if ($tests_to_run[$heartbeat_label]) {
         define('MOODLE_INTERNAL', true);
         $heartbeat_test = HeartbeatTests::check_muc_config();
-        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'OK' : 'missing or corrupt'), HeartbeatPerfInfo::get_usermicrotime());
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'OK' : "{$CFG->dataroot}/muc/config.php is missing or corrupt"), HeartbeatPerfInfo::get_usermicrotime());
         $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
@@ -228,7 +228,7 @@ Example:
     $heartbeat_label = 'REDIS';
     if ($heartbeat_redis_class_exists && $tests_to_run[$heartbeat_label] && isset($CFG->session_handler_class) && ($CFG->session_handler_class === '\core\session\redis')) {
         $heartbeat_test = HeartbeatTests::is_redis_readable();
-        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'available' : 'not available'), HeartbeatPerfInfo::get_usermicrotime());
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'available' : "{$CFG->session_redis_host}:{$CFG->session_redis_port} is not available"), HeartbeatPerfInfo::get_usermicrotime());
         $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
@@ -255,7 +255,7 @@ Example:
         }
     }
     if ($tests_to_run[$heartbeat_label]) {
-        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'available' : 'not available'), HeartbeatPerfInfo::get_usermicrotime());
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'available' : "{$CFG->dbhost}:{$CFG->dbname} is not available"), HeartbeatPerfInfo::get_usermicrotime());
         $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------
