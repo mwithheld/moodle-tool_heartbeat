@@ -125,6 +125,35 @@ class HeartbeatTests {
         return $is_redis_ready;
     }
 
+    static function is_redis_item_stuck($items_and_limits /* array($key_pattern, $time_limit_seconds) */) {
+        global $CFG;
+        $debug = false;
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started with $items_and_limits=' . print_r($items_and_limits, true));
+
+        $redis = new Redis();
+        $redis->connect($CFG->session_redis_host, $CFG->session_redis_port);
+
+        $stuck_items = array();
+        foreach ($items_and_limits as $key_pattern => $time_limit_seconds)
+            foreach ($redis->keys($key_pattern) as $key) {
+                //In seconds, with precision 10 seconds
+                $idletime = $redis->object('idletime', $key);
+                $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Looking at key=' . $key . '; $idletime=' . $idletime);
+
+                if ($idletime > $time_limit_seconds) {
+                    $stuck_items[] = "Key {$key} idle since {$idletime} seconds (limit={$time_limit_seconds}); value=" . $redis->get($key);
+                }
+            }
+
+        if (!empty($stuck_items)) {
+            $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::About to return STATUS_WARNING');
+            return array(STATUS_WARNING, implode('; ', $stuck_items));
+        }
+
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::About to return STATUS_OK');
+        return array(STATUS_OK, 'OK');
+    }
+
     static function check_muc_config() {
         global $CFG;
 
