@@ -315,9 +315,9 @@ Example:
     $heartbeat_label = 'REDIS_ITEM_STUCK';
     if ($heartbeat_redisconnection_success && $tests_to_run[$heartbeat_label]) {
         $heartbeat_redis_items_and_limits = array(
-            '*modinfo_build_course_cache_*'  => 10 * 60,
-            '*\mod_forum\task\cron_task*'    => 1.5 * 60 * 60,
-            '*\mod_hsuforum\task\cron_task*' => 1.5 * 60 * 60,
+            '*modinfo_build_course_cache_*'  => 10 * 60 /* 10 minutes */,
+            '*\mod_forum\task\cron_task*'    => 1.5 * 60 * 60 /* 1.5 hours */,
+            '*\mod_hsuforum\task\cron_task*' => 1.5 * 60 * 60 /* 1.5 hours */,
         );
 
         list($heartbeat_test, $heartbeat_test_msg) = HeartbeatTests::is_redis_item_stuck($heartbeat_redis_items_and_limits);
