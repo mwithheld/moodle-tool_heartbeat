@@ -291,7 +291,7 @@ Example:
     if ($heartbeat_dbconnection_success && $tests_to_run[$heartbeat_label]) {
         //List any scheduled tasks that are known-bad using their class name e.g. \core\task\question_cron_task
         $heartbeat_skip_cron_tasks = array(
-            '\core\task\question_cron_task',
+            //'\core\task\question_cron_task',
         );
         //Check the last run on these tasks even if they have status=disabled
         //E.g. if you run the scheduled task manually separate from the usual Moodle-cron
