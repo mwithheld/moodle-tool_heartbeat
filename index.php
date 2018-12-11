@@ -33,9 +33,7 @@ ini_set('error_log', '/moodle_static/error_log.' . date('Ymd'));
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL | E_STRICT);
 
-require_once(__DIR__ . '/lib.php');
-
-$heartbeat_debug = true;
+$heartbeat_debug = false;
 $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . '::Started');
 
 //Collect test results here
@@ -43,6 +41,7 @@ $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . '::Started');
 //  - The testname is required to meet Nagios specifications
 //  - Testname will be converted to ALL_CAPS and ONE_WORD for easier automated log parsing/processing
 $heartbeat_test_results = array();
+require_once(__DIR__ . '/lib.php');
 require_once(__DIR__ . '/classes/HeartbeatTestResult.php');
 require_once(__DIR__ . '/classes/HeartbeatPerfInfo.php');
 require_once(__DIR__ . '/classes/HeartbeatTests.php');
@@ -57,7 +56,7 @@ $heartbeat_label = 'HEARTBEAT_START';
 if ((!$heartbeat_is_cli && (empty($_GET) || ( isset($_GET[$heartbeat_label]) && ($_GET[$heartbeat_label] || $_GET['ALL']))) ) ||
         ( $heartbeat_is_cli && !empty(getopt('', array("$heartbeat_label::"))[$heartbeat_label]) )
 ) {
-    $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, STATUS_OK, 'started', HeartbeatPerfInfo::get_usermicrotime());
+    $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, STATUS_OK, 'started on ' . gethostname(), HeartbeatPerfInfo::get_usermicrotime());
     $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
 }
 //------------------------------------------------------------------------------
@@ -88,7 +87,7 @@ try {
     if ($heartbeat_is_cli) {
         //Make sure Moodle knows this is CLI
         //CLI_SCRIPT means we do not have session and we do not output HTML
-        define('CLI_SCRIPT', true);
+        defined('CLI_SCRIPT') || define('CLI_SCRIPT', true);
 
         require_once($CFG->dirroot . '/lib/clilib.php');
 
@@ -130,7 +129,7 @@ Example:
         //This is not a CLI script
         //
         //Do not setup cookies
-        define('NO_MOODLE_COOKIES', true);
+        defined('NO_MOODLE_COOKIES') || define('NO_MOODLE_COOKIES', true);
 
         foreach ($tests_to_run as $test_name => $default_value) {
             //Adapted from moodlelib.php::optional_param()
@@ -171,9 +170,9 @@ Example:
     $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . '::About to load config.php');
 
     //Do not error out in lib/setup.php if an upgrade is running
-    define('NO_UPGRADE_CHECK', true);
+    defined('NO_UPGRADE_CHECK') || define('NO_UPGRADE_CHECK', true);
     //Do not load libraries or DB connection
-    define('ABORT_AFTER_CONFIG', true);
+    defined('ABORT_AFTER_CONFIG') || define('ABORT_AFTER_CONFIG', true);
 
     if ($heartbeat_cli_maintenance_enabled) {
         /*
@@ -215,7 +214,7 @@ Example:
     //Test: Is a Moodle upgrade pending?
     $heartbeat_label = 'CACHE_CONFIG';
     if ($tests_to_run[$heartbeat_label]) {
-        define('MOODLE_INTERNAL', true);
+        defined('MOODLE_INTERNAL') || define('MOODLE_INTERNAL', true);
         $heartbeat_test = HeartbeatTests::check_muc_config();
         $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_CRITICAL), ($heartbeat_test ? 'OK' : "{$CFG->dataroot}/muc/config.php is missing or corrupt"), HeartbeatPerfInfo::get_usermicrotime());
         $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
@@ -287,8 +286,21 @@ Example:
     //Requires DB.
     $heartbeat_label = 'CRON_TASKS';
     if ($heartbeat_dbconnection_success && $tests_to_run[$heartbeat_label]) {
-        list($heartbeat_test, $message) = HeartbeatTests::check_cron_tasks();
-        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, ($heartbeat_test ? STATUS_OK : STATUS_WARNING), ($heartbeat_test ? 'cron is fine' : $message), HeartbeatPerfInfo::get_usermicrotime());
+        //List any scheduled tasks that are known-bad using their class name e.g. \core\task\question_cron_task
+        $heartbeat_skip_cron_tasks = array(
+            '\core\task\question_cron_task',
+        );
+        //Check the last run on these tasks even if they have status=disabled
+        //E.g. if you run the scheduled task manually separate from the usual Moodle-cron
+        //"Plugin disabled" tasks are still ignored regardless of this setting.
+        $heartbeat_include_disabled_tasks = array(
+            '\mod_forum\task\cron_task',
+            '\mod_hsuforum\task\cron_task',
+        );
+
+        list($heartbeat_test, $message) = HeartbeatTests::check_cron_tasks($heartbeat_skip_cron_tasks, $heartbeat_include_disabled_tasks);
+        error_log(__FILE__ . '::' . __LINE__ . "::{$heartbeat_label}::Got result \$heartbeat_test={$heartbeat_test}; message={$message}");
+        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, $heartbeat_test, ($heartbeat_test === STATUS_OK ? 'cron is fine' : $message), HeartbeatPerfInfo::get_usermicrotime());
         $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label} "/* \$heartbeat_test_results=" . print_r($heartbeat_test_results, true) */);
     }
     //------------------------------------------------------------------------------

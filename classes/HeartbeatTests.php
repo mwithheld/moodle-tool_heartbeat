@@ -11,7 +11,7 @@ class HeartbeatTests {
     static function is_climaintenance_enabled($configfile) {
         $debug = false;
         $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started with $configfile=' . $configfile);
-        
+
         $content = preg_replace(array(
             '#[^!:]//#', /* Set comments to be on newlines, replace '//' with '\n//', where // does not start with : */
             '/;/', /* Split up statements, replace ';' with ';\n' */
@@ -24,7 +24,7 @@ class HeartbeatTests {
         if (!empty($matches)) {
             $dataroot = $matches[count($matches) - 1];
             $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Found dataroot=' . $dataroot);
-            $climaintenance =  $dataroot . '/climaintenance.html';
+            $climaintenance = $dataroot . '/climaintenance.html';
 
             if (file_exists($climaintenance)) {
                 $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Found $climaintenance=true');
@@ -160,74 +160,95 @@ class HeartbeatTests {
         return $result;
     }
 
-    function check_cron_tasks() {
+    function check_cron_tasks($skip_cron_tasks = array(), $include_disabled_tasks = array()) {
         global $DB;
-        
-        $cronerror  = 6;   // Hours. Threshold for no cron run error in hours
-        $cronwarn       = 2;   // Hours. Threshold for no cron run warn in hours
-        $delaythreshold = 600; // Minutes. Threshold for fail delay cron error in minutes
-        $delaywarn      = 60;  // Minutes. Threshold for fail delay cron warn in minutes
-        
-        $format = '%b %d %H:%M:%S';
-        $now = userdate(time(), $format);
-        
+        $debug = false;
+        if ($debug) {
+            error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started with $skip_cron_tasks=' . print_r($skip_cron_tasks, true));
+            error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started with $include_disabled_tasks=' . print_r($include_disabled_tasks, true));
+        }
+
+        $cron_critical_time = 6;   // Hours. Threshold for no cron run error in hours
+        $cron_warn_time = 2;   // Hours. Threshold for no cron run warn in hours
+        $delayerror = 600; // Minutes. Threshold for fail delay cron error in minutes
+        $delaywarn = 60;  // Minutes. Threshold for fail delay cron warn in minutes
+
+        $date_format = '%b %d %H:%M:%S';
+
         //What is the last time the cron ran?
-        $lastcron = $DB->get_field_sql('SELECT MAX(lastruntime) FROM {task_scheduled}');
+        $lastruntime = $DB->get_field_sql('SELECT MAX(lastruntime) FROM {task_scheduled}');
         $currenttime = time();
-        $difference = $currenttime - $lastcron;
-        $when = userdate($lastcron, $format);
-        if ( $difference > $cronerror * 60 * 60 ) {
-            return array(false, "Moodle cron ran > {$cronerror} hours ago at {$when}");
+        $difference = $currenttime - $lastruntime;
+        $when = userdate($lastruntime, $date_format);
+        if ($difference > $cron_critical_time * 60 * 60) {
+            return array(STATUS_CRITICAL, "Moodle cron ran > {$cron_critical_time} hours ago at {$when}");
         }
-        if ( $difference > $cronwarn * 60 * 60 ) {
-            return array(false, "Moodle cron ran > {$cronwarn} hours ago at {$when}");
+        if ($difference > $cron_warn_time * 60 * 60) {
+            return array(STATUS_WARNING, "Moodle cron ran > {$cron_warn_time} hours ago at {$when}");
         }
-        
-        $delay = '';
-        $maxdelay = 0;
+
+        $delay_info_arr = array();
+        $max_task_delay_secs = 0;
         $tasks = core\task\manager::get_all_scheduled_tasks();
-        $legacylastrun = null;
+
         foreach ($tasks as $task) {
-            if ($task->get_disabled()) {
+            $task_classname = '\\' . ltrim(get_class($task), '\\');
+            $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Looking at task=' . print_r($task, true));
+
+            $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::In skip array=' . in_array($task_classname, $skip_cron_tasks));
+            if (in_array($task_classname, $skip_cron_tasks)) {
+                $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Task is in the should_skip array, so skip it; name=' . $task_classname);
                 continue;
             }
-            $faildelay = $task->get_fail_delay();
-            if (get_class($task) == 'core\task\legacy_plugin_cron_task') {
-                $legacylastrun = $task->get_last_run_time();
-            }
-            if ($faildelay == 0) {
+
+            $in_disabled_tasks = in_array($task_classname, $include_disabled_tasks);
+            $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::In disabled array=' . $in_disabled_tasks);
+            if (!$in_disabled_tasks && $task->get_disabled()) {
+                $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Skipping task=' . $task_classname);
                 continue;
             }
-            if ($faildelay > $maxdelay) {
-                $maxdelay = $faildelay;
+
+            //Only skip those with faildelay==0 if they are *not* in the include_disabled array
+            if ($in_disabled_tasks) {
+                $lastruntime = $task->get_last_run_time();
+                $task_frequency_sec = $task->get_next_scheduled_time() - $currenttime;
+                $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . "'::For this \$in_disabled_tasks task, comparing \$currenttime=$currenttime vs lastruntime=" . $lastruntime . '; $task_frequency (min)=' . $task_frequency_sec / 60);
+
+                //This task should run every $task_frequency_sec seconds
+                //"Should have run" == It is later than the $lastruntime + $task_frequency_sec + ($delaywarn in seconds)
+                if ($currenttime > $lastruntime + $task_frequency_sec + $delaywarn * 60) {
+                    $max_task_delay_secs = $currenttime - $lastruntime;
+                } else {
+                    continue;
+                }
+            } else {
+                $faildelay = $task->get_fail_delay();
+                $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Got $faildelay=' . $faildelay);
+
+                if ($faildelay == 0) {
+                    $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Not in_disabled_tasks and faildelay=0, so continue');
+                    continue;
+                }
+                if ($faildelay > $max_task_delay_secs) {
+                    $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::$faildelay > $max_task_delay_secs');
+                    $max_task_delay_secs = $faildelay;
+                }
             }
-            $delay .= "TASK: " . $task->get_name() . ' (' .get_class($task) . ") Delay: $faildelay\n";
+
+            $delay_info_arr[] = $task_classname;
         }
-//        
-//        
-//        if ( empty($legacylastrun) ) {
-//            send_warning("Moodle legacy task isn't running\n");
-//        }
-//        $minsincelegacylastrun = floor((time() - $legacylastrun) / 60);
-//        $when = userdate($legacylastrun, $format);
-//
-//        if ( $minsincelegacylastrun > 6 * 60) {
-//            send_critical("Moodle legacy task hasn't run in 6 hours\nLast run at $when");
-//        }
-//        if ( $minsincelegacylastrun > 2 * 60) {
-//            send_warning("Moodle legacy task hasn't run in 2 hours\nLast run at $when");
-//        }
-//
-//        $maxminsdelay = $maxdelay / 60;
-//        if ( $maxminsdelay > $options['delayerror'] ) {
-//            send_critical("Moodle task faildelay > {$options['delayerror']} mins\n$delay");
-//
-//        } else if ( $maxminsdelay > $options['delaywarn'] ) {
-//            send_warning("Moodle task faildelay > {$options['delaywarn']} mins\n$delay");
-//        }
-//
-//        send_good("MOODLE CRON RUNNING\n");
-        return array(true, "");
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Done the for loop; $max_task_delay_secs=' . $max_task_delay_secs . '; $delay_info_arr=' . print_r($delay_info_arr, true));
+
+        $delay_info = implode('; ', $delay_info_arr);
+        $maxminsdelay = $max_task_delay_secs / 60;
+        if ($maxminsdelay > $delayerror) {
+            return array(STATUS_CRITICAL, "Moodle task not run since > {$delayerror} mins: {$delay_info}");
+        } else if ($maxminsdelay > $delaywarn) {
+            return array(STATUS_WARNING, "Moodle task not run since > {$delaywarn} mins: {$delay_info}");
+        }
+
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::About to return STATUS_OK');
+        return array(STATUS_OK, 'cron tasks are running normally');
     }
 
 }
