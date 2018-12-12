@@ -48,11 +48,6 @@ class HeartbeatTests {
     }
 
     static function is_upgrade_pending() {
-        global $CFG;
-
-        $debug = false;
-        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started - empty($CFG)=' . empty($CFG));
-
         return moodle_needs_upgrading();
     }
 
