@@ -120,7 +120,17 @@ class HeartbeatTests {
         return $is_redis_ready;
     }
 
-    static function is_redis_item_stuck($items_and_limits /* array($key_pattern, $time_limit_seconds) */) {
+    /**
+     * Returns STATUS_WARNING if the matching redis $key_pattern has object idletime > $time_limit_seconds
+     * Note that idletime = number of seconds since the object stored at the specified key's last *read or write* operation +/- 10 seconds.
+     * So...
+     *    THIS METHOD CHANGES THE IDLETIME of they key just by reading it!!!
+     *
+     * @global type $CFG
+     * @param Array $items_and_limits - array($key_pattern, $time_limit_seconds)
+     * @return STATUS_*
+     */
+    static function is_redis_item_stuck($items_and_limits) {
         global $CFG;
         $debug = false;
         $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Started with $items_and_limits=' . print_r($items_and_limits, true));
@@ -128,8 +138,15 @@ class HeartbeatTests {
         $redis = new Redis();
         $redis->connect($CFG->session_redis_host, $CFG->session_redis_port);
 
+        //Look for each item with single backslashes (e.g. \mod_forum\task\cron_task) and double (e.g. \\mod_forum\\task\\cron_task)
+        foreach ($items_and_limits as $key => $value) {
+            $items_and_limits[preg_replace('/\\\+/', '\\\\\\', $key)] = $value;
+        }
+        $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Built $items_and_limits=' . print_r($items_and_limits, true));
+
         $stuck_items = array();
-        foreach ($items_and_limits as $key_pattern => $time_limit_seconds)
+        foreach ($items_and_limits as $key_pattern => $time_limit_seconds) {
+            $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::Looking at $key_pattern=' . $key_pattern . '; $time_limit_seconds (minutes)=' . $time_limit_seconds / 60);
             foreach ($redis->keys($key_pattern) as $key) {
                 //In seconds, with precision 10 seconds
                 $idletime = $redis->object('idletime', $key);
@@ -139,6 +156,7 @@ class HeartbeatTests {
                     $stuck_items[] = "Key {$key} idle since {$idletime} seconds (limit={$time_limit_seconds}); value=" . $redis->get($key);
                 }
             }
+        }
 
         if (!empty($stuck_items)) {
             $debug && error_log(__CLASS__ . '::' . __FUNCTION__ . '::About to return STATUS_WARNING');

@@ -77,7 +77,7 @@ try {
         'MOODLEDATA'           => false,
         'CACHE_CONFIG'         => false,
         'REDIS_CONNECTION'     => false,
-        'REDIS_ITEM_STUCK'     => false,
+//        'REDIS_ITEM_STUCK'     => false,
         'MOODLE_DB_READABLE'   => false,
         'DB_MAINTENANCE_MODE'  => false,
         'UPGRADE_PENDING'      => false,
@@ -116,7 +116,7 @@ Options:
   --MOODLEDATA               (default false) Check if the moodledata folder is writable
   --MOODLE_DB_READABLE       (default false) Check the if the Moodle DB is readable
   --REDIS_CONNECTION         (default false) Check if Redis is pingable
-  --REDIS_ITEM_STUCK         (default false) Check if certain Redis items are hanging around too long
+  --REDIS_ITEM_STUCK         (default false) Not available: Check if certain Redis items are hanging around too long
   --CACHE_CONFIG             (default false) Check the cache config file is present and sensible
   --DB_MAINTENANCE_MODE      (default false) Check if the DB-set maintenance mode is enabled
   --UPGRADE_PENDING          (default false) Check if Moodle thinks an upgrade is pending
@@ -291,7 +291,7 @@ Example:
     if ($heartbeat_dbconnection_success && $tests_to_run[$heartbeat_label]) {
         //List any scheduled tasks that are known-bad using their class name e.g. \core\task\question_cron_task
         $heartbeat_skip_cron_tasks = array(
-            //'\core\task\question_cron_task',
+                //'\core\task\question_cron_task',
         );
         //Check the last run on these tasks even if they have status=disabled
         //E.g. if you run the scheduled task manually separate from the usual Moodle-cron
@@ -311,19 +311,33 @@ Example:
     //------------------------------------------------------------------------------
     //Test: Is there Redis tasks hanging around too long?
     //Requires: Redis.
-    $heartbeat_redis_class_exists = class_exists('Redis') && is_readable($CFG->dirroot . '/lib/classes/session/redis.php');
-    $heartbeat_label = 'REDIS_ITEM_STUCK';
-    if ($heartbeat_redisconnection_success && $tests_to_run[$heartbeat_label]) {
-        $heartbeat_redis_items_and_limits = array(
-            '*modinfo_build_course_cache_*'  => 10 * 60 /* 10 minutes */,
-            '*\mod_forum\task\cron_task*'    => 1.5 * 60 * 60 /* 1.5 hours */,
-            '*\mod_hsuforum\task\cron_task*' => 1.5 * 60 * 60 /* 1.5 hours */,
-        );
-
-        list($heartbeat_test, $heartbeat_test_msg) = HeartbeatTests::is_redis_item_stuck($heartbeat_redis_items_and_limits);
-        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, $heartbeat_test, ($heartbeat_test === STATUS_OK ? 'OK' : $heartbeat_test_msg), HeartbeatPerfInfo::get_usermicrotime());
-        $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label}");
-    }
+//    $heartbeat_redis_class_exists = class_exists('Redis') && is_readable($CFG->dirroot . '/lib/classes/session/redis.php');
+//    $heartbeat_label = 'REDIS_ITEM_STUCK';
+//    if ($heartbeat_redisconnection_success && $tests_to_run[$heartbeat_label]) {
+//        /**
+//         * Scheduled tasks have Redis keys like in a few formats:
+//         *     - "csomdl2p.uvic.ca:1521/MDL2P_cron_assignfeedback_editpdf\\task\\convert_submissions"
+//         *     - "csomdl2p.uvic.ca:1521/MDL2P_cron_\\assignfeedback_editpdf\\task\\convert_submissions"
+//         * So make sure you omit the leading and trailing backslash.
+//         * Use only single slashes - the function is_redis_item_stuck() will automatically search for matches with both single and double backslashes.
+//         *
+//         * Note that idletime = number of seconds since the object stored at the specified key's last *read or write* operation +/- 10 seconds
+//         *
+//         * DISABLED B/C THIS METHOD CHANGES THE IDLETIME of they key just by reading it!!!
+//         *
+//         * Moodle does use MUC for other things like modinfo_build_course_cache_<int>
+//         */
+//        $heartbeat_redis_items_and_limits = array(
+//            '*modinfo_build_course_cache_*'                     => 10 * 60 /* 10 minutes */,
+//            '*mod_forum\task\cron_task*'                        => 1.5 * 60 * 60 /* 1.5 hours */,
+//            '*mod_hsuforum\task\cron_task*'                     => 1.5 * 60 * 60 /* 1.5 hours */,
+//            '*assignfeedback_editpdf\task\convert_submissions*' => 1.5 * 60 * 60 /* 1.5 hours */,
+//        );
+//
+//        list($heartbeat_test, $heartbeat_test_msg) = HeartbeatTests::is_redis_item_stuck($heartbeat_redis_items_and_limits);
+//        $heartbeat_test_results[] = new HeartbeatTestResult($heartbeat_label, $heartbeat_test, ($heartbeat_test === STATUS_OK ? 'OK' : $heartbeat_test_msg), HeartbeatPerfInfo::get_usermicrotime());
+//        $heartbeat_debug && error_log(__FILE__ . '::' . __LINE__ . "::Done test={$heartbeat_label}");
+//    }
     //------------------------------------------------------------------------------
     //
     //If we get here we probably have not hit a fatal exception
