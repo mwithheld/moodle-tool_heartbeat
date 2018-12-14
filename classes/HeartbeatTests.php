@@ -202,7 +202,7 @@ class HeartbeatTests {
         return $result;
     }
 
-    function check_cron_tasks($skip_cron_tasks = array(), $include_disabled_tasks = array()) {
+    static function check_cron_tasks($skip_cron_tasks = array(), $include_disabled_tasks = array()) {
         global $DB;
         $debug = false;
         if ($debug) {

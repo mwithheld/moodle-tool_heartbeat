@@ -129,9 +129,6 @@ Example:
         }
     } else {
         //This is not a CLI script
-        //
-        //Do not setup cookies
-        defined('NO_MOODLE_COOKIES') || define('NO_MOODLE_COOKIES', true);
 
         foreach ($tests_to_run as $test_name => $default_value) {
             //Adapted from moodlelib.php::optional_param()
@@ -243,7 +240,10 @@ Example:
         $heartbeat_label = 'MOODLE_DB_READABLE';
 
         //Tell Moodle to load libraries and DB - cancels the above ABORT_AFTER_CONFIG
-        define('ABORT_AFTER_CONFIG_CANCEL', true);
+        defined('ABORT_AFTER_CONFIG_CANCEL') || define('ABORT_AFTER_CONFIG_CANCEL', true);
+        //Do not setup cookies
+        //Commented out to avoid Notice: NO_MOODLE_COOKIES already defined.  
+        //defined('NO_MOODLE_COOKIES') || define('NO_MOODLE_COOKIES', true);
         require($CFG->dirroot . '/lib/setup.php');
 
         if ($tests_to_run[$heartbeat_label]) {
